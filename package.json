@@ -1,0 +1,30 @@
+{
+  "name": "damager",
+  "version": "1.0.0",
+  "description": "Game Boy assembler. Compatible with RGBDS.",
+  "main": "build/lib/index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "mocha test/assembler --compilers ts:ts-node/register"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/osnr/damager.git"
+  },
+  "author": "Omar Rizwan <omar.rizwan@gmail.com>",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/osnr/damager/issues"
+  },
+  "homepage": "https://github.com/osnr/damager#readme",
+  "dependencies": {
+    "parsimmon": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^2.2.39",
+    "mocha": "^3.2.0",
+    "ts-node": "^2.1.0"
+  }
+}
