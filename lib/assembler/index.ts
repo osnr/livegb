@@ -1,13 +1,32 @@
-import { string, regexp, sepBy, lazy, seq, alt,
-  whitespace, optWhitespace, Parser } from 'parsimmon';
+import { string, regexp, sepBy, lazy, seq, alt, noneOf,
+  Parser } from 'parsimmon';
+import { math } from './math';
 
-function symbol(s: string) { return string(s); }
-const space = whitespace;
-const optSpace = optWhitespace;
+function symbol(s: string) { return string(s).or(string(s.toUpperCase())); }
+const space = string(' ').or(string('\t')).atLeast(1);
+const optSpace = string(' ').or(string('\t')).many();
 
-const const_8bit = regexp(/[0-9]+/).map(x => parseFloat(x));
-const const_3bit = regexp(/[0-9]+/).map(x => parseFloat(x));
-const const_16bit = regexp(/[0-9]+/).map(x => parseFloat(x));
+const id = regexp(/[a-zA-z_\.][a-zA-Z0-9_\\@#][a-zA-Z0-9_\\@#]*/);
+
+const stringLiteral = string('"').then(noneOf('"').many()).skip(string('"'));
+
+const constLiteral: Parser<any> = alt(
+  regexp(/[0-9]+/).map(x => parseInt(x, 10)),
+  string('$').then(regexp(/[0-9a-fA-F]+/)).map(x => parseInt(x, 16)),
+  string('%').then(regexp(/[0-1]+/)).map(x => parseInt(x, 2)),
+  id,
+  stringLiteral
+);
+
+const const_any: Parser<any> = math(constLiteral);
+
+const const_8bit = const_any;
+const const_3bit = const_any;
+const const_16bit = const_any;
+
+// function reg(regs: string[]): Parser<number> {
+//   return alt.apply(alt, regs.map((name, idx) => symbol(name).result(idx)))
+// }
 
 const reg_r = alt(
   symbol('b').result(0),
@@ -49,7 +68,7 @@ const ccode = alt(
 );
 
 function indirect<A>(p: Parser<A>): Parser<A> {
-  return string('[').then(p).skip(string(']'));
+  return string('[').skip(optSpace).then(p).skip(optSpace).skip(string(']'));
 }
 function $ff00_plus<A>(p: Parser<A>): Parser<A> {
   return indirect(symbol('$ff00+').then(p));
@@ -61,6 +80,7 @@ function unaryOp<A>(name: string, argP: Parser<A>): Parser<A> {
 function binaryOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>): Parser<[A, B]> {
   return symbol(name).skip(space).then(seq(
     argP1
+      .skip(optSpace)
       .skip(string(','))
       .skip(optSpace),
     argP2
@@ -102,11 +122,11 @@ function append16(arr: Z80[], nn: number): Z80[] {
 const cpuOp: Parser<Z80[]> = alt(
   // ADC n; ADC r
   arithmeticCpuOp('adc', 0xCE, 0x88),
-  // ADD n; ADD r
-  arithmeticCpuOp('add', 0xC6, 0x80),
   // ADD HL, ss
   binaryCpuOp('add', symbol('hl'), reg_ss,
     (_, ss) => [0x09|(ss<<4)]),
+  // ADD n; ADD r
+  arithmeticCpuOp('add', 0xC6, 0x80),
   // ADD SP, n
   binaryCpuOp('add', symbol('sp'), const_8bit,
     (_, n) => [0xE8, n]),
@@ -129,10 +149,10 @@ const cpuOp: Parser<Z80[]> = alt(
   nullaryCpuOp('cpl', 0x2F),
   // DAA
   nullaryCpuOp('daa', 0x27),
-  // DEC r
-  unaryCpuOp('dec', reg_r, r => [0x05|(r<<3)]),
   // DEC ss
   unaryCpuOp('dec', reg_ss, ss => [0x0B|(ss<<4)]),
+  // DEC r
+  unaryCpuOp('dec', reg_r, r => [0x05|(r<<3)]),
   // DI
   nullaryCpuOp('di', 0xF3),
   // EI
@@ -141,10 +161,10 @@ const cpuOp: Parser<Z80[]> = alt(
   binaryCpuOp('ex', symbol('hl'), indirect(symbol('sp')), () => [0xE3]),
   // HALT
   nullaryCpuOp('halt', 0x76),
-  // INC r
-  unaryCpuOp('inc', reg_r, r => [0x04|(r<<3)]),
   // INC ss
   unaryCpuOp('inc', reg_ss, ss => [0x03|(ss<<4)]),
+  // INC r
+  unaryCpuOp('inc', reg_r, r => [0x04|(r<<3)]),
   // JP (HL)
   unaryCpuOp('jp', indirect(symbol('hl')), () => [0xE9]),
   // JP cc, nn
@@ -152,11 +172,11 @@ const cpuOp: Parser<Z80[]> = alt(
     (cc, nn) => append16([0xC2|(cc<<3)], nn)),
   // JP nn
   unaryCpuOp('jp', const_16bit, nn => append16([0xC3], nn)),
-  // JR n
-  unaryCpuOp('jr', const_8bit, n => [0x18, n]),
   // JR cc, n
   binaryCpuOp('jr', ccode, const_8bit,
     (cc, n) => [0x20|(cc<<3), n]),
+  // JR n
+  unaryCpuOp('jr', const_8bit, n => [0x18, n]),
   // LD (nn), SP
   binaryCpuOp('ld', indirect(const_16bit), symbol('sp'),
     (nn, _) => append16([0x08], nn)),
@@ -201,12 +221,12 @@ const cpuOp: Parser<Z80[]> = alt(
   unaryCpuOp('push', reg_tt, tt => [0xC5|(tt<<4)]),
   // RES n3, r
   binaryCpuOp('res', const_3bit, reg_r, (n3, r) => [0xCB, 0x80|(n3<<3)|r]),
-  // RET
-  nullaryCpuOp('ret', 0xC9),
-  // RET cc
-  unaryCpuOp('ret', ccode, cc => [0xC0|(cc<<3)]),
   // RETI
   nullaryCpuOp('reti', 0xD9),
+  // RET cc
+  unaryCpuOp('ret', ccode, cc => [0xC0|(cc<<3)]),
+  // RET
+  nullaryCpuOp('ret', 0xC9),
   // RL r; RLA
   rotateCpuOp('rl', 0x10, 0x17),
   // RLC r; RLCA
@@ -239,22 +259,54 @@ const cpuOp: Parser<Z80[]> = alt(
   arithmeticCpuOp('xor', 0xEE, 0xA8)
 );
 
-const id = regexp(/[a-zA-z_][a-zA-Z0-9_\\@#][a-zA-Z0-9_\\@#]*/);
+const sectionType = alt(
+  symbol('WRAM0').or(symbol('BSS')),
+  symbol('VRAM'),
+  symbol('ROMX'),
+  symbol('ROM0').or(symbol('HOME')),
+  symbol('HRAM'),
+  symbol('WRAMX'),
+  symbol('SRAM')
+);
+
+const simplePseudoOp = (function() {
+  const db = symbol('db').skip(optSpace).then(sepBy(const_8bit, string(',').then(optSpace)));
+  const dw = symbol('dw').skip(optSpace).then(sepBy(const_16bit, string(',').then(optSpace)));
+
+  return alt(
+    db,
+    dw,
+    binaryOp('section', stringLiteral, seq(sectionType, indirect(const_any))),
+    binaryOp('section', stringLiteral, sectionType),
+  );
+})();
+
+const pseudoOp = (function() {
+  const equ = id.skip(space).then(unaryOp('equ', const_any)).map(c => c);
+
+  return alt(
+    equ
+  );
+})();
 
 const label = alt(
-  string(''),
-  id,
-  id.then(string(':')),
-  id.then(string('::'))
+  id.skip(optSpace).skip(string(':')),
+  id.skip(optSpace).skip(string('::')),
+  id
 );
 
+const comment = string(';').then(noneOf('\n').many());
 
-const line = alt(
-  label.then(cpuOp)/*,
-  label.then(macro),
-  label.then(simplePseudoOp),
-  pseudoOp*/
-);
+const line = optSpace.then(alt(
+  label.skip(optSpace).then(cpuOp),
+  // label.then(macro),
+  label.skip(optSpace).then(simplePseudoOp),
+  cpuOp,
+  simplePseudoOp,
+  pseudoOp,
+  label,
+  optSpace
+)).skip(optSpace.then(comment.or(string(''))));
 
 const lines: Parser<any> = sepBy(line as any, string('\n'));
 
