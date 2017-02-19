@@ -1127,9 +1127,9 @@ help.innerHTML = `
 <li>Mess with the sprite and background cloud data in the DATA section near the bottom.</li>
 <li>If sound is working, change the tones at the bottom!</li>
 </ul>
+<p>Refresh the page to reset.</p>
 `;
 document.body.appendChild(help);
-
 
 
 let rom, gb: any, gbi: any, runner: any;
@@ -1145,10 +1145,10 @@ function patch() {
 
     // two possible patching strategies -- reset and replay input,
     // or try to reasonably splice on top of RAM
-    gbi = gb(help, rom, { sound: xas });
+    gbi = gb(canvas, rom, { sound: xas });
 gbi.stopEmulator = 1;
 gbi.start();
-let runner = window.setInterval(() => gbi.run(), 8);
+runner = window.setInterval(() => gbi.run(), 8);
 
     /*gbi.ROMImage = rom;
     gbi.ROMLoad(true);*/
@@ -1162,7 +1162,7 @@ patch();
 gb = require('./gameboy');
 
 const xas = require('./XAudioJS').XAudioServer;
-gbi = gb(help, rom, { sound: xas });
+gbi = gb(canvas, rom, { sound: xas });
 gbi.stopEmulator = 1;
 gbi.start();
 runner = window.setInterval(() => gbi.run(), 8);
