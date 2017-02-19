@@ -1,15 +1,15 @@
-import { string, regexp, sepBy, lazy, seq, alt, noneOf, succeed,
+import { string, regexp, sepBy, lazy, seq, alt, takeWhile, succeed,
   Parser } from 'parsimmon';
 import * as Parsimmon from 'parsimmon';
 import { math } from './math';
 
-function symbol(s: string) { return string(s).or(string(s.toUpperCase())); }
+function symbol(s: string) { return string(s); }
 const space = regexp(/[ \t]+/);
 const optSpace = regexp(/[ \t]*/);
 
 const id = regexp(/[a-zA-z_\.][a-zA-Z0-9_\\@#][a-zA-Z0-9_\\@#]*/);
 
-const stringLiteral = string('"').then(regexp(/[^"]*/)).skip(string('"'));
+const stringLiteral = string('"').then(takeWhile(c => c !== '"')).skip(string('"'));
 
 const constLiteral: Parser<any> = alt(
   regexp(/[0-9]+/).map(x => parseInt(x, 10)),
@@ -91,53 +91,53 @@ function binaryOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>): Parse
 type Z80 = number;
 type CpuOp = { name: string, afterParser: Parser<Z80[]> };
 
-function nullaryCpuOp(name: string, byte: Z80): CpuOp {
-  return { name, afterParser: succeed([byte]) };
-}
-function unaryCpuOp<A>(name: string, argP: Parser<A>, map: (arg: A) => Z80[]): CpuOp {
-  return { name, afterParser: space.then(argP).map(map) };
-}
-function binaryCpuOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>, map: (arg1: A, arg2: B) => Z80[]): CpuOp {
-  return {
-    name,
-    afterParser: space.then(seq(
-      argP1
-        .skip(optSpace)
-        .skip(string(','))
-        .skip(optSpace),
-      argP2
-    )).map(([a, b]) => map(a, b))
-  };
-}
-
-function arithmeticCpuOp(name: string, immPrefixByte: Z80, argPrefixBits: Z80): CpuOp {
-  // immPrefixByte -- 1 byte. next byte is the immediate
-  // argPrefixBits -- upper few bits. bottom bits specify which reg
-
-  // TODO: Support "adc a, b" syntax.
-  return {
-    name,
-    afterParser: space.then(alt(
-      const_8bit.map(n => [immPrefixByte, n]), // op_a_n
-      reg_r.map(r => [argPrefixBits | r]) // op_a_r
-    ))
-  };
-}
-function rotateCpuOp(name: string, aByte: Z80, rPrefixBits: Z80): CpuOp {
-  return {
-    name,
-    afterParser: alt(
-      space.then(reg_r).map(r => [0xCB, rPrefixBits|r]),
-      string('a').result([aByte])
-    )
-  };
-}
-
-function append16(arr: Z80[], nn: number): Z80[] {
-  return arr.concat([(nn>>8)&0xFF, nn&0xFF]);
-}
-
 const cpuOp: Parser<Z80[]> = (function() {
+  function nullaryCpuOp(name: string, byte: Z80): CpuOp {
+    return { name, afterParser: succeed([byte]) };
+  }
+  function unaryCpuOp<A>(name: string, argP: Parser<A>, map: (arg: A) => Z80[]): CpuOp {
+    return { name, afterParser: space.then(argP).map(map) };
+  }
+  function binaryCpuOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>, map: (arg1: A, arg2: B) => Z80[]): CpuOp {
+    return {
+      name,
+      afterParser: space.then(seq(
+        argP1
+          .skip(optSpace)
+          .skip(string(','))
+          .skip(optSpace),
+        argP2
+      )).map(([a, b]) => map(a, b))
+    };
+  }
+
+  function arithmeticCpuOp(name: string, immPrefixByte: Z80, argPrefixBits: Z80): CpuOp {
+    // immPrefixByte -- 1 byte. next byte is the immediate
+    // argPrefixBits -- upper few bits. bottom bits specify which reg
+
+    // TODO: Support "adc a, b" syntax.
+    return {
+      name,
+      afterParser: space.then(alt(
+        const_8bit.map(n => [immPrefixByte, n]), // op_a_n
+        reg_r.map(r => [argPrefixBits | r]) // op_a_r
+      ))
+    };
+  }
+  function rotateCpuOp(name: string, aByte: Z80, rPrefixBits: Z80): CpuOp {
+    return {
+      name,
+      afterParser: alt(
+        space.then(reg_r).map(r => [0xCB, rPrefixBits|r]),
+        string('a').result([aByte])
+      )
+    };
+  }
+
+  function append16(arr: Z80[], nn: number): Z80[] {
+    return arr.concat([(nn>>8)&0xFF, nn&0xFF]);
+  }
+
   const ops: CpuOp[] = [
     // ADC n; ADC r
     arithmeticCpuOp('adc', 0xCE, 0x88),
@@ -290,7 +290,7 @@ const cpuOp: Parser<Z80[]> = (function() {
       }
     }
     return Parsimmon.makeFailure(i, 'wut');
-  }).chain((afterParsers: Parser<Z80[]>[]) => alt.apply(alt, afterParsers));
+  }).chain((afterParsers: Parser<Z80[]>[]) => alt.apply(alt, afterParsers) as any as Parser<Z80[]>);
 })();
 
 const sectionType = alt(
@@ -304,28 +304,30 @@ const sectionType = alt(
 );
 
 const simplePseudoOp = (function() {
-  const db = symbol('db').skip(optSpace).then(sepBy(const_8bit, string(',').then(optSpace)));
-  const dw = symbol('dw').skip(optSpace).then(sepBy(const_16bit, string(',').then(optSpace)));
+  // FIXME: Limitation to make it fast.
+  const db = symbol('DB').skip(optSpace)
+    .then(sepBy(constLiteral, string(',').then(optSpace)));
+  const dw = symbol('DW').skip(optSpace).then(sepBy(const_16bit, string(',').then(optSpace)));
 
   return alt(
     db,
     dw,
-    binaryOp('section', stringLiteral, seq(sectionType, indirect(const_any))),
-    binaryOp('section', stringLiteral, sectionType),
+    binaryOp('SECTION', stringLiteral, seq(sectionType, indirect(const_any))),
+    binaryOp('SECTION', stringLiteral, sectionType),
   );
 })();
 
 const pseudoOp = (function() {
-  const equ = id.skip(space).then(unaryOp('equ', const_any)).map(c => c);
+  const equ = id.skip(space).then(unaryOp('EQU', const_any)).map(c => c);
 
   return alt(
     equ
   );
 })();
 
-const label = id.skip(optSpace).skip(string(':').or(string('::')));
+const label = id.skip(optSpace).skip(string('::').or(string(':')));
 
-const comment = string(';').then(noneOf('\n').many());
+const comment = string(';').then(takeWhile(c => c !== '\n'));
 
 const statement = optSpace.then(alt(
   label.skip(optSpace).then(alt(
