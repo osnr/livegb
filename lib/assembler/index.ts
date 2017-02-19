@@ -1,4 +1,4 @@
-import { string, regexp, sepBy, lazy, seq, alt, noneOf,
+import { string, regexp, sepBy, lazy, seq, alt, noneOf, succeed,
   Parser } from 'parsimmon';
 import * as Parsimmon from 'parsimmon';
 import { math } from './math';
@@ -92,29 +92,45 @@ type Z80 = number;
 type CpuOp = { name: string, afterParser: Parser<Z80[]> };
 
 function nullaryCpuOp(name: string, byte: Z80): CpuOp {
-  return symbol(name).result([byte]);
+  return { name, afterParser: succeed([byte]) };
 }
 function unaryCpuOp<A>(name: string, argP: Parser<A>, map: (arg: A) => Z80[]): CpuOp {
-  return unaryOp(name, argP).map(map);
+  return { name, afterParser: space.then(argP).map(map) };
 }
 function binaryCpuOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>, map: (arg1: A, arg2: B) => Z80[]): CpuOp {
-  return binaryOp(name, argP1, argP2).map(([a, b]) => map(a, b));
+  return {
+    name,
+    afterParser: space.then(seq(
+      argP1
+        .skip(optSpace)
+        .skip(string(','))
+        .skip(optSpace),
+      argP2
+    )).map(([a, b]) => map(a, b))
+  };
 }
+
 function arithmeticCpuOp(name: string, immPrefixByte: Z80, argPrefixBits: Z80): CpuOp {
   // immPrefixByte -- 1 byte. next byte is the immediate
   // argPrefixBits -- upper few bits. bottom bits specify which reg
 
   // TODO: Support "adc a, b" syntax.
-  return unaryOp(name, alt(
-    const_8bit.map(n => [immPrefixByte, n]), // op_a_n
-    reg_r.map(r => [argPrefixBits|r]) // op_a_r
-  ));
+  return {
+    name,
+    afterParser: space.then(alt(
+      const_8bit.map(n => [immPrefixByte, n]), // op_a_n
+      reg_r.map(r => [argPrefixBits | r]) // op_a_r
+    ))
+  };
 }
-function rotateCpuOp(name: string, aByte: Z80, rPrefixBits: Z80) {
-  return alt(
-    unaryOp(name, reg_r).map(r => [0xCB, rPrefixBits|r]),
-    nullaryCpuOp(name + 'a', aByte)
-  );
+function rotateCpuOp(name: string, aByte: Z80, rPrefixBits: Z80): CpuOp {
+  return {
+    name,
+    afterParser: alt(
+      space.then(reg_r).map(r => [0xCB, rPrefixBits|r]),
+      string('a').result([aByte])
+    )
+  };
 }
 
 function append16(arr: Z80[], nn: number): Z80[] {
@@ -261,6 +277,20 @@ const cpuOp: Parser<Z80[]> = (function() {
     // XOR n; XOR r
     arithmeticCpuOp('xor', 0xEE, 0xA8)
   ];
+  const opTable: {[name: string]: Parser<Z80[]>[]} = {};
+  ops.forEach(({ name, afterParser }) => {
+    if (!(name in opTable)) opTable[name] = [];
+    opTable[name].push(afterParser);
+  });
+  return Parsimmon(function(input: string, i: number) {
+    for (let len = 4; len >= 1; len--) {
+      const instr = input.slice(i, i + len);
+      if (instr in opTable) {
+        return Parsimmon.makeSuccess(i + len, opTable[instr]);
+      }
+    }
+    return Parsimmon.makeFailure(i, 'wut');
+  }).chain((afterParsers: Parser<Z80[]>[]) => alt.apply(alt, afterParsers));
 })();
 
 const sectionType = alt(
