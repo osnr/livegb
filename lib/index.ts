@@ -1,6 +1,5 @@
-import { readFileSync, writeFileSync } from 'fs';
 import * as Assembler from './assembler';
-import { macroPass } from './assembler/macro';
+
 
 let spriteAsm = `
 ; sprite.asm - Avik Das
@@ -1064,22 +1063,22 @@ notes:
 // test('sub', 'sub');
 // test('xor', 'xor');
 //
-
-function tryProfile() { if (console.profile) console.profile(); }
-function tryProfileEnd() { if (console.profileEnd) console.profileEnd(); }
 //
-console.time('macro pass');
-macroPass(spriteAsm);
-console.timeEnd('macro pass');
-
-console.time('macro pass');
-macroPass(spriteAsm);
-console.timeEnd('macro pass');
-
-console.time('macro pass');
-macroPass(spriteAsm);
-console.timeEnd('macro pass');
+// function tryProfile() { if (console.profile) console.profile(); }
+// function tryProfileEnd() { if (console.profileEnd) console.profileEnd(); }
+// //
+// console.time('macro pass');
+// macroPass(spriteAsm);
+// console.timeEnd('macro pass');
 //
+// console.time('macro pass');
+// macroPass(spriteAsm);
+// console.timeEnd('macro pass');
+//
+// console.time('macro pass');
+// macroPass(spriteAsm);
+// console.timeEnd('macro pass');
+// //
 // console.time('avik das');
 // tryProfile();
 // const result = Assembler.assemble(spriteAsm);
@@ -1093,9 +1092,54 @@ console.timeEnd('macro pass');
 //
 //
 
-console.time('avik das');
-const rom = (Assembler.assemble(spriteAsm));
-writeFileSync('game.gb', Buffer.from(rom));
-console.timeEnd('avik das');
 
+
+
+const editor = document.createElement('textarea');
+editor.style.position = 'fixed';
+editor.style.width = '50%';
+editor.style.height = '100%';
+editor.style.top = '0';
+editor.style.left = '0';
+editor.style.font = '14px Monaco';
+editor.value = spriteAsm;
+document.body.appendChild(editor);
+
+
+const canvas = document.createElement('canvas');
+canvas.style.position = 'fixed';
+canvas.style.top = '0';
+canvas.style.left = '51%';
+canvas.style.border = '1px solid gray';
+canvas.style.height = '288px';
+canvas.style.width = '320px';
+document.body.appendChild(canvas);
+
+let rom, gb;
+let started = false;
+function patch() {
+  console.time('avik das');
+  const asm = editor.value;
+  rom = (Assembler.assemble(asm));
+  console.timeEnd('avik das');
+
+  if (started) {
+    gbi.ROMImage = rom;
+    gbi.ROMLoad(true);
+  }
+}
+
+editor.onkeyup = patch;
+
+patch();
+
+gb = require('./gameboy');
+
+const xas = require('./XAudioJS').XAudioServer;
+const gbi = gb(canvas, rom, { sound: xas });
+gbi.stopEmulator = 1;
+gbi.start();
+window.setInterval(() => gbi.run(), 8);
+
+started = true;
 

@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/osnr/damager#readme",
   "dependencies": {
+    "debug": "^2.6.1",
     "parsimmon": "^1.0.0"
   },
   "devDependencies": {
