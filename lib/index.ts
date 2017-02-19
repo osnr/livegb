@@ -1125,6 +1125,7 @@ help.innerHTML = `
 <ul>
 <li>Quick way to break the game: comment out 'jp vblank' in the interrupt handler in HOME[$40] near the top.</li>
 <li>Mess with the sprite and background cloud data in the DATA section near the bottom.</li>
+<li>Change the bgpal color palette!</li>
 <li>If sound is working, change the tones at the bottom!</li>
 </ul>
 <p>Refresh the page to reset.</p>
