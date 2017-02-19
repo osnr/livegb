@@ -1094,7 +1094,8 @@ console.timeEnd('macro pass');
 //
 
 console.time('avik das');
-Assembler.assemble(spriteAsm);
+const rom = (Assembler.assemble(spriteAsm));
+writeFileSync('game.gb', Buffer.from(rom));
 console.timeEnd('avik das');
 
 

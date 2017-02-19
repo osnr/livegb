@@ -429,7 +429,7 @@ const statement: Parser<FirstPass[]> = optSpace.then(alt(
 
 const statements: Parser<FirstPass[]> =
   sepBy(statement as any, string('\n'))
-    .map(sts => [].concat.apply([], sts).filter((x: FirstPass) => x));
+    .map(sts => [].concat.apply([], sts).filter((x: FirstPass) => x !== null));
 
 export function pass(input: FirstPass[]): Z80[] {
   // We need an imperative walker here.
@@ -437,8 +437,12 @@ export function pass(input: FirstPass[]): Z80[] {
   const symbolTable: {[symbol: string]: number} = {};
 
   const secondPass: (Z80|Deferred)[] = [];
-  for (const item of input) {
+  for (let idx = 0; idx < input.length; idx++) {
+    const item = input[idx];
     if (typeof item === 'number' || item.kind == 'deferred') {
+      if (address == 0x40) {
+        console.log(idx, item, idx - 1, input[idx - 1]);
+      }
       secondPass[address] = item;
       address++;
     } else if (item.kind === 'section') {
@@ -449,13 +453,14 @@ export function pass(input: FirstPass[]): Z80[] {
       throw new Error('Invalid first-pass item: ' + item);
     }
   }
+  console.log(secondPass[0x40]);
 
   const rom: Z80[] = [];
   for (const addr in secondPass) {
     const val = secondPass[addr];
     if (typeof val === 'number') {
       rom[addr] = val;
-    } else if (val === null) {
+    } else if (val == null) {
       rom[addr] = 0;
     } else if (val.kind === 'deferred') {
       rom[addr] = val.resolve(symbolTable);
