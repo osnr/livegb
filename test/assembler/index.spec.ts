@@ -3,11 +3,11 @@ import { expect } from 'chai';
 
 import { readFileSync } from 'fs';
 
-import { parse } from '../../lib/assembler/index';
+import * as Assembler from '../../lib/assembler/index';
 
 describe('assembler assembles', function() {
   function assemble(s: string): number[] {
-    const result = parse.parse(s);
+    const result = Assembler.parse.parse(s);
     if (result.status) {
       return [].concat.apply([], result.value);
     } else {
@@ -56,8 +56,16 @@ vblank:
 
   it('avik das', function() {
     const asm = readFileSync('test/assembler/avik-das-sprite.asm', 'utf8');
-    const result = parse.parse(asm);
+    const result = Assembler.parse.parse(asm);
     console.log(result);
     expect(result.status).to.equal(true);
   });
+
+  // Slower!
+  // it('avik das linewise', function() {
+  //   const asm = readFileSync('test/assembler/avik-das-sprite.asm', 'utf8');
+  //   const result = Assembler.linewiseParse.parse(asm);
+  //   console.log(result);
+  //   expect(result.status).to.equal(true);
+  // });
 });

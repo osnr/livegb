@@ -558,7 +558,7 @@ react_to_input:
 
   call toggle_white_noise
 
-.move_return
+.move_return:
   ret
 
 animate_sprite:
