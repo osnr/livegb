@@ -1115,7 +1115,24 @@ canvas.style.height = '288px';
 canvas.style.width = '320px';
 document.body.appendChild(canvas);
 
-let rom, gb, gbi, runner;
+const help = document.createElement('div');
+help.style.position = 'fixed';
+help.style.top = '298px';
+help.style.left = '51%';
+help.style.font = '14px Verdana';
+help.innerHTML = `
+<p>Fun things to try...</p>
+<ul>
+<li>Quick way to break the game: comment out 'jp vblank' in the interrupt handler in HOME[$40] near the top.</li>
+<li>Mess with the sprite and background cloud data in the DATA section near the bottom.</li>
+<li>If sound is working, change the tones at the bottom!</li>
+</ul>
+`;
+document.body.appendChild(help);
+
+
+
+let rom, gb: any, gbi: any, runner: any;
 let started = false;
 function patch() {
   console.time('avik das');
@@ -1128,7 +1145,7 @@ function patch() {
 
     // two possible patching strategies -- reset and replay input,
     // or try to reasonably splice on top of RAM
-    gbi = gb(canvas, rom, { sound: xas });
+    gbi = gb(help, rom, { sound: xas });
 gbi.stopEmulator = 1;
 gbi.start();
 let runner = window.setInterval(() => gbi.run(), 8);
@@ -1145,7 +1162,7 @@ patch();
 gb = require('./gameboy');
 
 const xas = require('./XAudioJS').XAudioServer;
-gbi = gb(canvas, rom, { sound: xas });
+gbi = gb(help, rom, { sound: xas });
 gbi.stopEmulator = 1;
 gbi.start();
 runner = window.setInterval(() => gbi.run(), 8);
