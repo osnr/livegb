@@ -55,18 +55,18 @@ const const_16bit: Parser<[number, number]|[Deferred, Deferred]> = math(alt(
   numberLiteral,
   id
 )).map(nn => {
-  if (typeof nn === 'number') return [(nn >> 8) & 0xFF, nn & 0xFF];
+  if (typeof nn === 'number') return [nn & 0xFF, (nn >> 8) & 0xFF];
   else if (typeof nn == 'string') return [
-    { kind: 'deferred', resolve: (symbolTable: any) => (symbolTable[nn] >> 8) & 0xFF },
-    { kind: 'deferred', resolve: (symbolTable: any) => symbolTable[nn] & 0xFF }
+    { kind: 'deferred', resolve: (symbolTable: any) => symbolTable[nn] & 0xFF },
+    { kind: 'deferred', resolve: (symbolTable: any) => (symbolTable[nn] >> 8) & 0xFF }
   ];
   else if (nn.constructor == Array) {
     // Some arithmetic expression.
     return [
       { kind: 'deferred',
-        resolve: (symbolTable: any) => (evaluate(symbolTable, nn) >> 8) & 0xFF },
+        resolve: (symbolTable: any) => evaluate(symbolTable, nn) & 0xFF },
       { kind: 'deferred',
-        resolve: (symbolTable: any) => evaluate(symbolTable, nn) & 0xFF }
+        resolve: (symbolTable: any) => (evaluate(symbolTable, nn) >> 8) & 0xFF }
     ];
   } else {
     throw new Error('Weird 16-bit constant.');
@@ -370,7 +370,8 @@ const simplePseudoOp: Parser<FirstPass[]> = (function() {
   );
   const db = symbol('DB').skip(optSpace)
     .then(sepBy(dbConst, string(',').then(optSpace)))
-    .map(data => [].concat.apply([], data));
+    // Support both DB as nullary var declaration and DB as data constants.
+    .map(data => data.length > 0 ? [].concat.apply([], data) : [0]);
 
   const dw = symbol('DW').skip(optSpace)
     .then(sepBy(const_16bit, string(',').then(optSpace)))
@@ -453,7 +454,7 @@ export function pass(input: FirstPass[]): Z80[] {
       throw new Error('Invalid first-pass item: ' + item);
     }
   }
-  console.log(secondPass[0x40]);
+  console.log(symbolTable);
 
   const rom: Z80[] = [];
   for (const addr in secondPass) {
