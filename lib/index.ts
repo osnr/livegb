@@ -1146,13 +1146,17 @@ function patch() {
 
     // two possible patching strategies -- reset and replay input,
     // or try to reasonably splice on top of RAM
-    gbi = gb(canvas, rom, { sound: xas });
-gbi.stopEmulator = 1;
-gbi.start();
-runner = window.setInterval(() => gbi.run(), 8);
+    const justRerun = false;
+    if (justRerun) {
+      gbi = gb(canvas, rom, { sound: xas });
+      gbi.stopEmulator = 1;
+      gbi.start();
 
-    /*gbi.ROMImage = rom;
-    gbi.ROMLoad(true);*/
+    } else {
+      gbi.ROMImage = rom;
+      gbi.ROMLoad(true);
+    }
+    runner = window.setInterval(() => gbi.run(), 8);
   }
 }
 
