@@ -1,6 +1,7 @@
 import { string, regexp, sepBy, lazy, seq, alt, takeWhile, succeed, seqMap,
   Parser } from 'parsimmon';
 import * as Parsimmon from 'parsimmon';
+import { macroPass } from './macro';
 import { math } from './math';
 
 function symbol(s: string) { return string(s); }
@@ -445,7 +446,6 @@ export function pass(input: FirstPass[]): Z80[] {
     } else if (item.kind === 'label') {
       symbolTable[item.name] = address;
     } else {
-      debugger;
       throw new Error('Invalid first-pass item: ' + item);
     }
   }
@@ -468,6 +468,7 @@ export function pass(input: FirstPass[]): Z80[] {
 }
 
 export function assemble(s: string) {
-  const first = statements.tryParse(s);
+  const substituted = macroPass(s);
+  const first = statements.tryParse(substituted);
   return pass(first);
 }

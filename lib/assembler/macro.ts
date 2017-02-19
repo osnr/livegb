@@ -6,7 +6,7 @@ import { string, regexp, alt, seq, sepBy, seqMap, takeWhile, Parser } from 'pars
 const optLineSpace = regexp(/[ \t]*/);
 const lineSpace = regexp(/[ \t]+/);
 
-const token = regexp(/[^ \t\n,;\[\]]+|\[|\]|,/);
+const token = regexp(/[^ \t\n,;\[\]+*\/]+|\[|]|,|\+|\*|\//);
 
 // const macro; // TODO
 
@@ -49,19 +49,17 @@ const file: Parser<(Macro|Statement)[]> = alt(
   eol.result(null)
 ).many().map(r => r.filter(x => x));
 
-export function macroPass(s: string): string {
+export function macroPass(s: string, macroTable: {[name: string]: string} = {}): string {
   const lines = file.tryParse(s + '\n');
   // Go through.
   // Build macro table and simultaneously pull in to replace.
-  const macroTable: {[name: string]: string} = {};
   const newFile = [];
   for (const line of lines) {
     if (line.kind === 'macro') {
-      macroTable[line.name] = line.body;
+      macroTable[line.name] = macroPass(line.body, macroTable);
     } else if (line.kind === 'statement') {
       newFile.push(line.tokens.map(s => {
         if (s in macroTable) {
-          console.log(s, line);
           return macroTable[s];
         }
         return s;

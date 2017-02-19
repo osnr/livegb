@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'fs';
 import * as Assembler from './assembler';
+import { macroPass } from './assembler/macro';
 
 let spriteAsm = `
 ; sprite.asm - Avik Das
@@ -1066,12 +1067,34 @@ notes:
 
 function tryProfile() { if (console.profile) console.profile(); }
 function tryProfileEnd() { if (console.profileEnd) console.profileEnd(); }
+//
+console.time('macro pass');
+macroPass(spriteAsm);
+console.timeEnd('macro pass');
+
+console.time('macro pass');
+macroPass(spriteAsm);
+console.timeEnd('macro pass');
+
+console.time('macro pass');
+macroPass(spriteAsm);
+console.timeEnd('macro pass');
+//
+// console.time('avik das');
+// tryProfile();
+// const result = Assembler.assemble(spriteAsm);
+// tryProfileEnd();
+// console.timeEnd('avik das');
+//
+//
+// console.time('avik das');
+// Assembler.assemble(spriteAsm);
+// console.timeEnd('avik das');
+//
+//
 
 console.time('avik das');
-tryProfile();
-const result = Assembler.assemble(spriteAsm);
-tryProfileEnd();
+Assembler.assemble(spriteAsm);
 console.timeEnd('avik das');
 
-console.log(JSON.stringify(result, null, 2));
 
