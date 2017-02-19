@@ -1133,12 +1133,19 @@ help.innerHTML = `
 document.body.appendChild(help);
 
 
-let rom, gb: any, gbi: any, runner: any;
+declare var GameBoyCore: any;
+
+function ab2str(buf) {
+  return String.fromCharCode.apply(null, new Uint16Array(buf));
+}
+
+
+let rom, gbi: any, runner: any;
 let started = false;
 function patch() {
   console.time('avik das');
   const asm = editor.value;
-  rom = (Assembler.assemble(asm));
+  rom = ab2str(Assembler.assemble(asm));
   console.timeEnd('avik das');
 
   if (started) {
@@ -1148,7 +1155,7 @@ function patch() {
     // or try to reasonably splice on top of RAM
     const justRerun = false;
     if (justRerun) {
-      gbi = gb(canvas, rom, { sound: xas });
+      gbi = new GameBoyCore(canvas, rom);
       gbi.stopEmulator = 1;
       gbi.start();
 
@@ -1164,10 +1171,27 @@ editor.onkeyup = patch;
 
 patch();
 
-gb = require('./gameboy');
+window.settings =  [						//Some settings.
+	true, 								//Turn on sound.
+	true,								//Boot with boot ROM first?
+	false,								//Give priority to GameBoy mode
+	1,									//Volume level set.
+	true,								//Colorize GB mode?
+	false,								//Disallow typed arrays?
+	8,									//Interval for the emulator loop.
+	10,									//Audio buffer minimum span amount over x interpreter iterations.
+	20,									//Audio buffer maximum span amount over x interpreter iterations.
+	false,								//Override to allow for MBC1 instead of ROM only (compatibility for broken 3rd-party cartridges).
+	false,								//Override MBC RAM disabling and always allow reading and writing to the banks.
+	false,								//Use the GameBoy boot ROM instead of the GameBoy Color boot ROM.
+	false,								//Scale the canvas in JS, or let the browser scale the canvas?
+	true,								//Use image smoothing based scaling?
+    [true, true, true, true]            //User controlled channel enables.
+];
+window.cout = function(x) { console.log(x) };
+window.initNewCanvas = () => {};
 
-const xas = require('./XAudioJS').XAudioServer;
-gbi = gb(canvas, rom, { sound: xas });
+gbi = new GameBoyCore(canvas, rom);
 gbi.stopEmulator = 1;
 gbi.start();
 runner = window.setInterval(() => gbi.run(), 8);
