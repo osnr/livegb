@@ -1124,7 +1124,7 @@ help.innerHTML = `
 <p>Fun things to try...</p>
 <ul>
 <li>Quick way to break the game: comment out 'jp vblank' in the interrupt handler in HOME[$40] near the top.</li>
-<li>Mess with the sprite and background cloud data in the DATA section near the bottom.</li>
+<li><i>Mess with the sprite and background cloud data in the DATA section near the bottom. (Currently doesn't work, unfortunately, because of hotswap details.)</i></li>
 <li>Change the bgpal color palette!</li>
 <li>If sound is working, change the tones at the bottom!</li>
 </ul>
@@ -1205,14 +1205,19 @@ function toJoyPadEvent(keycode: number) {
   case 38: return JoyPad.Up;
   case 40: return JoyPad.Down;
   }
+  return 'none';
 }
 document.onkeyup = function(event) {
   if (event.target.tagName === 'TEXTAREA') return;
-  gbi.JoyPadEvent(toJoyPadEvent(event.keyCode), false);
+  const ev = toJoyPadEvent(event.keyCode);
+  if (ev === 'none') return;
+  gbi.JoyPadEvent(ev, false);
 };
 document.onkeydown = function(event) {
   if (event.target.tagName === 'TEXTAREA') return;
-  gbi.JoyPadEvent(toJoyPadEvent(event.keyCode), true);
+    const ev = toJoyPadEvent(event.keyCode);
+  if (ev === 'none') return;
+  gbi.JoyPadEvent(ev, true);
 };
 
 
