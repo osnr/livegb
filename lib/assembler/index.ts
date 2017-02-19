@@ -25,6 +25,7 @@ function evaluate(symbolTable: {[symbol: string]: number}, expr: any[]): number 
     'Add': (a, b) => a + b,
     'Divide': (a, b) => a / b
   } as {[key: string]: (a: number, b: number) => number})[expr[0]];
+  if (!reducer) throw new Error('could not find: ' + expr[0]);
   expr = expr.slice(1).map(n => {
     if (typeof n === 'number') return n;
     if (!(n in symbolTable)) throw new Error('not in sym table: ' + n);
@@ -33,19 +34,30 @@ function evaluate(symbolTable: {[symbol: string]: number}, expr: any[]): number 
   return expr.slice(1).reduce(reducer, expr[0]);
 }
 
-const const_8bit_literal: Parser<number|Deferred> = alt(
-  numberLiteral,
-  id.map(name => ({ kind: 'deferred', resolve: (symbolTable: any) => symbolTable[name] & 0xFF}))
-);
+function find(symbolTable: {[symbol: string]: number}, name: string): number {
+  if (name in symbolTable) return symbolTable[name];
+  throw new Error('could not find: ' + name);
+}
 
 const const_8bit: Parser<number|Deferred> = math(alt(numberLiteral, id)).map(n => {
   if (typeof n === 'number') return n;
-  else if (typeof n === 'string') return { kind: 'deferred', resolve: (symbolTable: any) => symbolTable[n] & 0xFF};
+  else if (typeof n === 'string') return { kind: 'deferred', resolve: (symbolTable: any, pos: number) => find(symbolTable, n) & 0xFF };
   else if (n.constructor === Array) {
     // Arithmetic expression.
     return { kind: 'deferred', resolve: (symbolTable: any) => evaluate(symbolTable, n) & 0xFF };
   } else {
-    throw new Error('Weird 16-bit constant.')
+    throw new Error('Weird 8-bit constant.')
+  }
+}) as any;
+
+const const_8bit_rel: Parser<number|Deferred> = math(alt(numberLiteral, id)).map(n => {
+  if (typeof n === 'number') return n;
+  else if (typeof n === 'string') return { kind: 'deferred', resolve: (symbolTable: any, pos: number) => (find(symbolTable, n) - pos - 1) & 0xFF };
+  else if (n.constructor === Array) {
+    // Arithmetic expression.
+    return { kind: 'deferred', resolve: (symbolTable: any, pos: number) => (evaluate(symbolTable, n) - pos - 1) & 0xFF };
+  } else {
+    throw new Error('Weird 8-bit constant.')
   }
 }) as any;
 
@@ -57,8 +69,8 @@ const const_16bit: Parser<[number, number]|[Deferred, Deferred]> = math(alt(
 )).map(nn => {
   if (typeof nn === 'number') return [nn & 0xFF, (nn >> 8) & 0xFF];
   else if (typeof nn == 'string') return [
-    { kind: 'deferred', resolve: (symbolTable: any) => symbolTable[nn] & 0xFF },
-    { kind: 'deferred', resolve: (symbolTable: any) => (symbolTable[nn] >> 8) & 0xFF }
+    { kind: 'deferred', resolve: (symbolTable: any) => find(symbolTable, nn) & 0xFF },
+    { kind: 'deferred', resolve: (symbolTable: any) => (find(symbolTable, nn) >> 8) & 0xFF }
   ];
   else if (nn.constructor == Array) {
     // Some arithmetic expression.
@@ -140,7 +152,8 @@ type Z80 = number;
 
 type Deferred = {
   kind: 'deferred';
-  resolve: (symbolTable: {[symbol: string]: number}) => number;
+  // Pos is to convert symbol to relative address for JR.
+  resolve: (symbolTable: {[symbol: string]: number}, pos: number) => number;
 };
 type FirstPass =
   Z80
@@ -251,10 +264,10 @@ const cpuOp: Parser<FirstPass[]> = (function() {
     // JP nn
     unaryCpuOp('jp', const_16bit, nn => ([0xC3] as FirstPass[]).concat(nn)),
     // JR cc, n
-    binaryCpuOp('jr', ccode, const_8bit,
+    binaryCpuOp('jr', ccode, const_8bit_rel,
       (cc, n) => [0x20|(cc<<3), n]),
     // JR n
-    unaryCpuOp('jr', const_8bit, n => [0x18, n]),
+    unaryCpuOp('jr', const_8bit_rel, n => [0x18, n]),
     // LD (nn), SP
     binaryCpuOp('ld', indirect(const_16bit), symbol('sp'),
       (nn, _) => append16([0x08], nn)),
@@ -262,21 +275,23 @@ const cpuOp: Parser<FirstPass[]> = (function() {
     binaryCpuOp('ld', $ff00_plus(symbol('c')), symbol('a'), () => [0xE2]),
     // LD ($FF00+n), A
     binaryCpuOp('ld', $ff00_plus(const_8bit), symbol('a'), (n, _) => [0xE0, n]),
-    // LD (nn), A
-    binaryCpuOp('ld', indirect(const_16bit), symbol('a'),
-      (nn, _) => append16([0xEA], nn)),
     // LD (rr), A
     binaryCpuOp('ld', reg_rr, symbol('a'),
       (rr, _) => [0x02|(rr<<4)]),
+    // LD (nn), A
+    binaryCpuOp('ld', indirect(const_16bit), symbol('a'),
+      (nn, _) => append16([0xEA], nn)),
     // LD A, ($FF00+C)
     binaryCpuOp('ld', symbol('a'), $ff00_plus(symbol('c')), () => [0xF2]),
     // LD A, ($FF00+n)
     binaryCpuOp('ld', symbol('a'), $ff00_plus(const_8bit), (_, n) => [0xF0, n]),
+    // LD A, (rr)
+    binaryCpuOp('ld', symbol('a'), reg_rr, (_, rr) => [0x0A|(rr<<4)]),
+    // LD r, r'
+    binaryCpuOp('ld', reg_r, reg_r, (r1, r2) => [0x40|(r1<<3)|(r2)]),
     // LD A, (nn)
     binaryCpuOp('ld', symbol('a'), indirect(const_16bit),
       (_, nn) => append16([0xFA], nn)),
-    // LD A, (rr)
-    binaryCpuOp('ld', symbol('a'), reg_rr, (_, rr) => [0x0A|(rr<<4)]),
     // LD HL, (SP+n)
     binaryCpuOp('ld', symbol('hl'),
       indirect(symbol('sp +').or(symbol('sp+')).then(const_8bit)),
@@ -285,8 +300,6 @@ const cpuOp: Parser<FirstPass[]> = (function() {
     binaryCpuOp('ld', symbol('sp'), symbol('hl'), () => [0xF9]),
     // LD r, n
     binaryCpuOp('ld', reg_r, const_8bit, (r, n) => [0x06|(r<<3), n]),
-    // LD r, r'
-    binaryCpuOp('ld', reg_r, reg_r, (r1, r2) => [0x40|(r1<<3)|(r2)]),
     // LD ss, nn
     binaryCpuOp('ld', reg_ss, const_16bit, (ss, nn) => append16([0x01|(ss<<4)], nn)),
     // NOP
@@ -441,9 +454,6 @@ export function pass(input: FirstPass[]): Z80[] {
   for (let idx = 0; idx < input.length; idx++) {
     const item = input[idx];
     if (typeof item === 'number' || item.kind == 'deferred') {
-      if (address == 0x40) {
-        console.log(idx, item, idx - 1, input[idx - 1]);
-      }
       secondPass[address] = item;
       address++;
     } else if (item.kind === 'section') {
@@ -464,7 +474,7 @@ export function pass(input: FirstPass[]): Z80[] {
     } else if (val == null) {
       rom[addr] = 0;
     } else if (val.kind === 'deferred') {
-      rom[addr] = val.resolve(symbolTable);
+      rom[addr] = val.resolve(symbolTable, parseFloat(addr));
     } else {
       throw new Error('Invalid second-pass item: ' + val);
     }
@@ -475,6 +485,7 @@ export function pass(input: FirstPass[]): Z80[] {
 
 export function assemble(s: string) {
   const substituted = macroPass(s);
+  /*console.log(substituted);*/
   const first = statements.tryParse(substituted);
   return pass(first);
 }
