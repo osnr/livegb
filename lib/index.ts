@@ -1165,6 +1165,8 @@ function patch() {
     }
     runner = window.setInterval(() => gbi.run(), 8);
   }
+
+  return false;
 }
 
 editor.onkeyup = patch;
@@ -1190,6 +1192,29 @@ window.settings =  [						//Some settings.
 ];
 window.cout = function(x) { console.log(x) };
 window.initNewCanvas = () => {};
+
+enum JoyPad { Right, Left, Up, Down, A, B, Select, Start }
+function toJoyPadEvent(keycode: number) {
+  switch (keycode) {
+  case 90: return JoyPad.A;
+  case 88: return JoyPad.B;
+  case 13: return JoyPad.Start;
+  case 16: return JoyPad.Select;
+  case 37: return JoyPad.Left;
+  case 39: return JoyPad.Right;
+  case 38: return JoyPad.Up;
+  case 40: return JoyPad.Down;
+  }
+}
+document.onkeyup = function(event) {
+  if (event.target.tagName === 'TEXTAREA') return;
+  gbi.JoyPadEvent(toJoyPadEvent(event.keyCode), false);
+};
+document.onkeydown = function(event) {
+  if (event.target.tagName === 'TEXTAREA') return;
+  gbi.JoyPadEvent(toJoyPadEvent(event.keyCode), true);
+};
+
 
 gbi = new GameBoyCore(canvas, rom);
 gbi.stopEmulator = 1;
