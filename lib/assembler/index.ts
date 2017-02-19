@@ -1,4 +1,4 @@
-import { string, regexp, sepBy, lazy, seq, alt, takeWhile, succeed,
+import { string, regexp, sepBy, lazy, seq, alt, takeWhile, succeed, seqMap,
   Parser } from 'parsimmon';
 import * as Parsimmon from 'parsimmon';
 import { math } from './math';
@@ -10,20 +10,67 @@ const optSpace = regexp(/[ \t]*/);
 const id = regexp(/[a-zA-z_\.][a-zA-Z0-9_\\@#][a-zA-Z0-9_\\@#]*/);
 
 const stringLiteral = string('"').then(takeWhile(c => c !== '"')).skip(string('"'));
-
-const constLiteral: Parser<any> = alt(
+const numberLiteral = alt(
   regexp(/[0-9]+/).map(x => parseInt(x, 10)),
   string('$').then(regexp(/[0-9a-fA-F]+/)).map(x => parseInt(x, 16)),
-  string('%').then(regexp(/[0-1]+/)).map(x => parseInt(x, 2)),
-  id,
-  stringLiteral
+  string('%').then(regexp(/[0-1]+/)).map(x => parseInt(x, 2))
 );
 
-const const_any: Parser<any> = math(constLiteral);
+const const_any: Parser<number> = numberLiteral;
 
-const const_8bit = const_any;
+function evaluate(symbolTable: {[symbol: string]: number}, expr: any[]): number {
+  const reducer = ({
+    'Subtract': (a, b) => a - b,
+    'Add': (a, b) => a + b,
+    'Divide': (a, b) => a / b
+  } as {[key: string]: (a: number, b: number) => number})[expr[0]];
+  expr = expr.slice(1).map(n => {
+    if (typeof n === 'number') return n;
+    if (!(n in symbolTable)) throw new Error('not in sym table: ' + n);
+    return symbolTable[n];
+  });
+  return expr.slice(1).reduce(reducer, expr[0]);
+}
+
+const const_8bit_literal: Parser<number|Deferred> = alt(
+  numberLiteral,
+  id.map(name => ({ kind: 'deferred', resolve: (symbolTable: any) => symbolTable[name] & 0xFF}))
+);
+
+const const_8bit: Parser<number|Deferred> = math(alt(numberLiteral, id)).map(n => {
+  if (typeof n === 'number') return n;
+  else if (typeof n === 'string') return { kind: 'deferred', resolve: (symbolTable: any) => symbolTable[n] & 0xFF};
+  else if (n.constructor === Array) {
+    // Arithmetic expression.
+    return { kind: 'deferred', resolve: (symbolTable: any) => evaluate(symbolTable, n) & 0xFF };
+  } else {
+    throw new Error('Weird 16-bit constant.')
+  }
+}) as any;
+
 const const_3bit = const_any;
-const const_16bit = const_any;
+
+const const_16bit: Parser<[number, number]|[Deferred, Deferred]> = math(alt(
+  numberLiteral,
+  id
+)).map(nn => {
+  if (typeof nn === 'number') return [(nn >> 8) & 0xFF, nn & 0xFF];
+  else if (typeof nn == 'string') return [
+    { kind: 'deferred', resolve: (symbolTable: any) => (symbolTable[nn] >> 8) & 0xFF },
+    { kind: 'deferred', resolve: (symbolTable: any) => symbolTable[nn] & 0xFF }
+  ];
+  else if (nn.constructor == Array) {
+    // Some arithmetic expression.
+    return [
+      { kind: 'deferred',
+        resolve: (symbolTable: any) => (evaluate(symbolTable, nn) >> 8) & 0xFF },
+      { kind: 'deferred',
+        resolve: (symbolTable: any) => evaluate(symbolTable, nn) & 0xFF }
+    ];
+  } else {
+    throw new Error('Weird 16-bit constant.');
+  }
+}) as any;
 
 // function reg(regs: string[]): Parser<number> {
 //   return alt.apply(alt, regs.map((name, idx) => symbol(name).result(idx)))
@@ -89,16 +136,31 @@ function binaryOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>): Parse
 }
 
 type Z80 = number;
-type CpuOp = { name: string, afterParser: Parser<Z80[]> };
 
-const cpuOp: Parser<Z80[]> = (function() {
+type Deferred = {
+  kind: 'deferred';
+  resolve: (symbolTable: {[symbol: string]: number}) => number;
+};
+type FirstPass =
+  Z80
+    | { kind: 'section'; name: string; sectionType: string; address?: number }
+    | { kind: 'label'; name: string }
+    | Deferred;
+
+type CpuOp = { name: string, afterParser: Parser<FirstPass[]> };
+
+const cpuOp: Parser<FirstPass[]> = (function() {
+  function append16(arr: FirstPass[], nn: [Deferred,Deferred]|[number,number]): FirstPass[] {
+    return arr.concat(nn);
+  }
+
   function nullaryCpuOp(name: string, byte: Z80): CpuOp {
     return { name, afterParser: succeed([byte]) };
   }
-  function unaryCpuOp<A>(name: string, argP: Parser<A>, map: (arg: A) => Z80[]): CpuOp {
+  function unaryCpuOp<A>(name: string, argP: Parser<A>, map: (arg: A) => FirstPass[]): CpuOp {
     return { name, afterParser: space.then(argP).map(map) };
   }
-  function binaryCpuOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>, map: (arg1: A, arg2: B) => Z80[]): CpuOp {
+  function binaryCpuOp<A, B>(name: string, argP1: Parser<A>, argP2: Parser<B>, map: (arg1: A, arg2: B) => FirstPass[]): CpuOp {
     return {
       name,
       afterParser: space.then(seq(
@@ -120,7 +182,7 @@ const cpuOp: Parser<Z80[]> = (function() {
       name,
       afterParser: space.then(alt(
         const_8bit.map(n => [immPrefixByte, n]), // op_a_n
-        reg_r.map(r => [argPrefixBits | r]) // op_a_r
+        reg_r.map(r => [argPrefixBits|r]) // op_a_r
       ))
     };
   }
@@ -132,10 +194,6 @@ const cpuOp: Parser<Z80[]> = (function() {
         string('a').result([aByte])
       )
     };
-  }
-
-  function append16(arr: Z80[], nn: number): Z80[] {
-    return arr.concat([(nn>>8)&0xFF, nn&0xFF]);
   }
 
   const ops: CpuOp[] = [
@@ -190,7 +248,7 @@ const cpuOp: Parser<Z80[]> = (function() {
     binaryCpuOp('jp', ccode, const_16bit,
       (cc, nn) => append16([0xC2|(cc<<3)], nn)),
     // JP nn
-    unaryCpuOp('jp', const_16bit, nn => append16([0xC3], nn)),
+    unaryCpuOp('jp', const_16bit, nn => ([0xC3] as FirstPass[]).concat(nn)),
     // JR cc, n
     binaryCpuOp('jr', ccode, const_8bit,
       (cc, n) => [0x20|(cc<<3), n]),
@@ -255,7 +313,7 @@ const cpuOp: Parser<Z80[]> = (function() {
     // RRC r; RRCA
     rotateCpuOp('rrc', 0x08, 0x0F),
     // RST n
-    unaryCpuOp('rst', const_8bit, n => [0xC7|n]),
+    unaryCpuOp('rst', const_8bit, n => [0xC7, n]), // TODO: Check this out
     // SBC n; SBC r
     arithmeticCpuOp('sbc', 0xDE, 0x98),
     // SCF
@@ -277,7 +335,7 @@ const cpuOp: Parser<Z80[]> = (function() {
     // XOR n; XOR r
     arithmeticCpuOp('xor', 0xEE, 0xA8)
   ];
-  const opTable: {[name: string]: Parser<Z80[]>[]} = {};
+  const opTable: {[name: string]: Parser<FirstPass[]>[]} = {};
   ops.forEach(({ name, afterParser }) => {
     if (!(name in opTable)) opTable[name] = [];
     opTable[name].push(afterParser);
@@ -290,7 +348,7 @@ const cpuOp: Parser<Z80[]> = (function() {
       }
     }
     return Parsimmon.makeFailure(i, 'wut');
-  }).chain((afterParsers: Parser<Z80[]>[]) => alt.apply(alt, afterParsers) as any as Parser<Z80[]>);
+  }).chain((afterParsers: Parser<FirstPass[]>[]) => alt.apply(alt, afterParsers) as any as Parser<FirstPass[]>);
 })();
 
 const sectionType = alt(
@@ -303,66 +361,113 @@ const sectionType = alt(
   symbol('SRAM')
 );
 
-const simplePseudoOp = (function() {
-  // FIXME: Limitation to make it fast.
+const simplePseudoOp: Parser<FirstPass[]> = (function() {
+  // FIXME: No expressions allowed to make it fast.
+  const dbConst: Parser<Z80[]> = alt(
+    numberLiteral.map(n => [n]), // 8BIT but no exprs pls
+    stringLiteral.map(s => s.split('').map(c => c.charCodeAt(0)))
+  );
   const db = symbol('DB').skip(optSpace)
-    .then(sepBy(constLiteral, string(',').then(optSpace)));
-  const dw = symbol('DW').skip(optSpace).then(sepBy(const_16bit, string(',').then(optSpace)));
+    .then(sepBy(dbConst, string(',').then(optSpace)))
+    .map(data => [].concat.apply([], data));
+
+  const dw = symbol('DW').skip(optSpace)
+    .then(sepBy(const_16bit, string(',').then(optSpace)))
+    .map(data => [].concat.apply([], data));
 
   return alt(
     db,
     dw,
-    binaryOp('SECTION', stringLiteral, seq(sectionType, indirect(const_any))),
-    binaryOp('SECTION', stringLiteral, sectionType),
+    binaryOp('SECTION', stringLiteral, seq(sectionType, indirect(numberLiteral)))
+      .map(([name, [sectionType, address]]) => [{
+        kind: 'section',
+        name,
+        sectionType,
+        address
+      }]),
+    binaryOp('SECTION', stringLiteral, sectionType)
+      .map(([name, sectionType]) => [{ kind: 'section', name, sectionType }]),
   );
 })();
 
-const pseudoOp = (function() {
-  const equ = id.skip(space).then(unaryOp('EQU', const_any)).map(c => c);
+const pseudoOp: Parser<FirstPass[]> = (function() {
+  const equ = id.skip(space).then(
+    unaryOp('EQU', alt(
+      /*stringLiteral.map(),*/
+      const_16bit
+    )));
 
   return alt(
     equ
   );
 })();
 
-const label = id.skip(optSpace).skip(string('::').or(string(':')));
+const label: Parser<FirstPass[]> =
+  id.skip(optSpace)
+    .skip(string('::').or(string(':')))
+    .map((name: string) => [{ kind: 'label', name } as FirstPass]);
 
 const comment = string(';').then(takeWhile(c => c !== '\n'));
 
-const statement = optSpace.then(alt(
-  label.skip(optSpace).then(alt(
-    cpuOp,
-    simplePseudoOp,
-    /*macro*/
-  )),
+const statement: Parser<FirstPass[]> = optSpace.then(alt(
+  seqMap(
+    label.skip(optSpace),
+    alt(
+      cpuOp,
+      simplePseudoOp,
+      /*macro*/
+    ),
+    (label, op) => label.concat(op)
+  ),
   cpuOp,
   simplePseudoOp,
   pseudoOp,
   label,
-  optSpace
+  optSpace.result(null)
 )).skip(optSpace.then(comment.or(string(''))));
 
-const statements: Parser<any> = sepBy(statement as any, string('\n'));
+const statements: Parser<FirstPass[]> =
+  sepBy(statement as any, string('\n'))
+    .map(sts => [].concat.apply([], sts).filter((x: FirstPass) => x));
 
-export const parse = statements;
+export function pass(input: FirstPass[]): Z80[] {
+  // We need an imperative walker here.
+  let address = 0;
+  const symbolTable: {[symbol: string]: number} = {};
 
-export const linewiseParse = {
-  parse(s: string): any {
-    const lines = s.split('\n');
-    const outs = [];
-    for (const l of lines) {
-      const result = statement.parse(l);
-      if (!result.status) {
-        console.error(l, result);
-        return {
-          status: false
-        }
-      }
-      outs.push(result.value);
-    }
-    return {
-      status: true,
-      value: outs
+  const secondPass: (Z80|Deferred)[] = [];
+  for (const item of input) {
+    if (typeof item === 'number' || item.kind == 'deferred') {
+      secondPass[address] = item;
+      address++;
+    } else if (item.kind === 'section') {
+      address = item.address;
+    } else if (item.kind === 'label') {
+      symbolTable[item.name] = address;
+    } else {
+      debugger;
+      throw new Error('Invalid first-pass item: ' + item);
     }
   }
+
+  const rom: Z80[] = [];
+  for (const addr in secondPass) {
+    const val = secondPass[addr];
+    if (typeof val === 'number') {
+      rom[addr] = val;
+    } else if (val === null) {
+      rom[addr] = 0;
+    } else if (val.kind === 'deferred') {
+      rom[addr] = val.resolve(symbolTable);
+    } else {
+      throw new Error('Invalid second-pass item: ' + val);
+    }
+  }
+
+  return rom;
+}
+
+export function assemble(s: string) {
+  const first = statements.tryParse(s);
+  return pass(first);
 }
