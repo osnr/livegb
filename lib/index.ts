@@ -1115,7 +1115,7 @@ canvas.style.height = '288px';
 canvas.style.width = '320px';
 document.body.appendChild(canvas);
 
-let rom, gb;
+let rom, gb, gbi, runner;
 let started = false;
 function patch() {
   console.time('avik das');
@@ -1124,8 +1124,17 @@ function patch() {
   console.timeEnd('avik das');
 
   if (started) {
-    gbi.ROMImage = rom;
-    gbi.ROMLoad(true);
+    window.clearInterval(runner);
+
+    // two possible patching strategies -- reset and replay input,
+    // or try to reasonably splice on top of RAM
+    gbi = gb(canvas, rom, { sound: xas });
+gbi.stopEmulator = 1;
+gbi.start();
+let runner = window.setInterval(() => gbi.run(), 8);
+
+    /*gbi.ROMImage = rom;
+    gbi.ROMLoad(true);*/
   }
 }
 
@@ -1136,10 +1145,10 @@ patch();
 gb = require('./gameboy');
 
 const xas = require('./XAudioJS').XAudioServer;
-const gbi = gb(canvas, rom, { sound: xas });
+gbi = gb(canvas, rom, { sound: xas });
 gbi.stopEmulator = 1;
 gbi.start();
-window.setInterval(() => gbi.run(), 8);
+runner = window.setInterval(() => gbi.run(), 8);
 
 started = true;
 
