@@ -1,5 +1,5 @@
 {
-  "name": "damager",
+  "name": "livegb",
   "version": "1.0.0",
   "description": "Game Boy assembler. Compatible with RGBDS.",
   "main": "build/lib/index.js",
@@ -7,18 +7,20 @@
     "test": "test"
   },
   "scripts": {
-    "test": "mocha test/assembler --compilers ts:ts-node/register"
+    "test": "mocha test/assembler --compilers ts:ts-node/register",
+    "build": "webpack",
+    "start": "webpack -w"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/osnr/damager.git"
+    "url": "git+https://github.com/osnr/livegb.git"
   },
   "author": "Omar Rizwan <omar.rizwan@gmail.com>",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/osnr/damager/issues"
+    "url": "https://github.com/osnr/livegb/issues"
   },
-  "homepage": "https://github.com/osnr/damager#readme",
+  "homepage": "https://github.com/osnr/livegb#readme",
   "dependencies": {
     "debug": "^2.6.1",
     "parsimmon": "^1.0.0"

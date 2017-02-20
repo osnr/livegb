@@ -1121,14 +1121,20 @@ help.style.top = '298px';
 help.style.left = '51%';
 help.style.font = '14px Verdana';
 help.innerHTML = `
+<p>Edit the Game Boy assembly on the left, and we assemble and hot-swap the new code into the running game on the right! The state of the game is preserved -- no restart.</p>
+<p>Controls: arrow keys, Z = A, X = B, Enter = START, RShift = SELECT.</p>
 <p>Fun things to try...</p>
 <ul>
 <li>Quick way to break the game: comment out 'jp vblank' in the interrupt handler in HOME[$40] near the top.</li>
+<li>Tired of the sound? Comment out 'call play_note' to mute.</li>
 <li><i>Mess with the sprite and background cloud data in the DATA section near the bottom. (Currently doesn't work, unfortunately, because of hotswap details.)</i></li>
 <li>Change the bgpal color palette!</li>
-<li>If sound is working, change the tones at the bottom!</li>
+<li>Change the tones at the bottom!</li>
 </ul>
 <p>Refresh the page to reset.</p>
+<p>The emulator is Grant Galitz's <a href="https://github.com/taisel/GameBoy-Online">GameBoy-Online</a>.</p>
+<p>The demo is from <a href="https://github.com/avik-das/gbdev">Avik Das</a>.</p>
+<p>I (<a href="http://rsnous.com">Omar Rizwan</a>) wrote a new <em>assembler</em> (in TypeScript) and hacked hotswap support into the emulator, then made this environment on top. More <a href="https://github.com/osnr/livegb">at GitHub</a>.</p>
 `;
 document.body.appendChild(help);
 
