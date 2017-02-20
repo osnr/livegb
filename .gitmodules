@@ -1,0 +1,3 @@
+[submodule "GameBoy-Online"]
+	path = GameBoy-Online
+	url = https://github.com/taisel/GameBoy-Online.git
