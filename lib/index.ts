@@ -1120,6 +1120,7 @@ help.style.position = 'fixed';
 help.style.top = '298px';
 help.style.left = '51%';
 help.style.font = '14px Verdana';
+help.style.marginRight = '1%';
 help.innerHTML = `
 <p>Edit the Game Boy assembly on the left, and we assemble and hot-swap the new code into the running game on the right! The state of the game is preserved -- no restart.</p>
 <p>Controls: arrow keys, Z = A, X = B, Enter = START, RShift = SELECT.</p>
@@ -1128,6 +1129,7 @@ help.innerHTML = `
 <li>Quick way to break the game: comment out 'jp vblank' in the interrupt handler in HOME[$40] near the top.</li>
 <li>Tired of the sound? Comment out 'call play_note' to mute.</li>
 <li><i>Mess with the sprite and background cloud data in the DATA section near the bottom. (Currently doesn't work, unfortunately, because of hotswap details.)</i></li>
+<li>Edit the 'sub 2' or 'add 2' in move_left, move_up, etc. Notice how you can mess up the sprite!</li>
 <li>Change the bgpal color palette!</li>
 <li>Change the tones at the bottom!</li>
 </ul>

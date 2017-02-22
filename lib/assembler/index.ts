@@ -405,18 +405,6 @@ const simplePseudoOp: Parser<FirstPass[]> = (function() {
   );
 })();
 
-const pseudoOp: Parser<FirstPass[]> = (function() {
-  const equ = id.skip(space).then(
-    unaryOp('EQU', alt(
-      /*stringLiteral.map(),*/
-      const_16bit
-    )));
-
-  return alt(
-    equ
-  );
-})();
-
 const label: Parser<FirstPass[]> =
   id.skip(optSpace)
     .skip(string('::').or(string(':')))
@@ -436,7 +424,6 @@ const statement: Parser<FirstPass[]> = optSpace.then(alt(
   ),
   cpuOp,
   simplePseudoOp,
-  pseudoOp,
   label,
   optSpace.result(null)
 )).skip(optSpace.then(comment.or(string(''))));

@@ -30,8 +30,12 @@ The emulator is an existing JS Game Boy emulator (patched a little to support re
 
 ## Future directions
 
-Hot-swap is not really hot-swap right now, just fast rerun (the demo game is mostly stateless anyway).
-Smarter hot-swap (with a custom assembler and more emulator tools, we can track provenance of regions of RAM, etc). Or do input replay instead.
+Hot-swap is real hot-swap, but unsound and doesn't work if data had
+been copied into RAM (e.g. the sprite data). I wonder why it works, actually...
+
+Smarter hot-swap (with a custom assembler and more emulator tools, we
+can track provenance of regions of RAM, etc). Or do rerun and input
+replay instead (maybe in some cases?).
 
 Track provenance of regions of display, so you click a pixel and it knows where it came from in the code.
 
