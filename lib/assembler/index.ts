@@ -210,6 +210,9 @@ const cpuOp: Parser<FirstPass[]> = (function() {
     };
   }
 
+  // Essentially transliterated from
+  // https://github.com/rednex/rgbds/blob/871c5ed3606ddc41fec3fdbde743656ebd583bb7/include/asm/localasm.h
+  // which is an amazing reference (wrong in a couple places, though).
   const ops: CpuOp[] = [
     // ADC n; ADC r
     arithmeticCpuOp('adc', 0xCE, 0x88),
@@ -349,6 +352,11 @@ const cpuOp: Parser<FirstPass[]> = (function() {
     // XOR n; XOR r
     arithmeticCpuOp('xor', 0xEE, 0xA8)
   ];
+  // Why don't we just use alt() to choose between ops while parsing?
+  // Because it's _horribly_ slow.
+  // We get at least 10x speedup overall by constructing an op lookup table here
+  // and directly looking up the next 1-4 characters in it.
+  // I retained the alt-style syntax above so I wouldn't have to rewrite it.
   const opTable: {[name: string]: Parser<FirstPass[]>[]} = {};
   ops.forEach(({ name, afterParser }) => {
     if (!(name in opTable)) opTable[name] = [];
@@ -362,6 +370,7 @@ const cpuOp: Parser<FirstPass[]> = (function() {
       }
     }
     return Parsimmon.makeFailure(i, 'wut');
+    // Chain here is an interesting trick to choose parser at parse time.
   }).chain((afterParsers: Parser<FirstPass[]>[]) => alt.apply(alt, afterParsers) as any as Parser<FirstPass[]>);
 })();
 
@@ -376,7 +385,7 @@ const sectionType = alt(
 );
 
 const simplePseudoOp: Parser<FirstPass[]> = (function() {
-  // FIXME: No expressions allowed to make it fast.
+  // FIXME: No expressions allowed in DB statements, to make it fast to parse.
   const dbConst: Parser<Z80[]> = alt(
     numberLiteral.map(n => [n]), // 8BIT but no exprs pls
     stringLiteral.map(s => s.split('').map(c => c.charCodeAt(0)))
@@ -451,7 +460,6 @@ export function pass(input: FirstPass[]): Z80[] {
       throw new Error('Invalid first-pass item: ' + item);
     }
   }
-  console.log(symbolTable);
 
   const rom: Z80[] = [];
   for (const addr in secondPass) {
@@ -472,7 +480,6 @@ export function pass(input: FirstPass[]): Z80[] {
 
 export function assemble(s: string) {
   const substituted = macroPass(s);
-  /*console.log(substituted);*/
   const first = statements.tryParse(substituted);
   return pass(first);
 }
