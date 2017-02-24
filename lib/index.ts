@@ -1143,7 +1143,7 @@ document.body.appendChild(help);
 
 declare var GameBoyCore: any;
 
-function ab2str(buf) {
+function ab2str(buf: number[]) {
   return String.fromCharCode.apply(null, new Uint16Array(buf));
 }
 
@@ -1181,7 +1181,7 @@ editor.onkeyup = patch;
 
 patch();
 
-window.settings =  [						//Some settings.
+(window as any).settings =  [						//Some settings.
 	true, 								//Turn on sound.
 	true,								//Boot with boot ROM first?
 	false,								//Give priority to GameBoy mode
@@ -1198,11 +1198,11 @@ window.settings =  [						//Some settings.
 	true,								//Use image smoothing based scaling?
     [true, true, true, true]            //User controlled channel enables.
 ];
-window.cout = function(x) { console.log(x) };
-window.initNewCanvas = () => {};
+(window as any).cout = function(x: any) { console.log(x) };
+(window as any).initNewCanvas = () => {};
 
 enum JoyPad { Right, Left, Up, Down, A, B, Select, Start }
-function toJoyPadEvent(keycode: number) {
+function toJoyPadEvent(keycode: number): any {
   switch (keycode) {
   case 90: return JoyPad.A;
   case 88: return JoyPad.B;
@@ -1215,13 +1215,13 @@ function toJoyPadEvent(keycode: number) {
   }
   return 'none';
 }
-document.onkeyup = function(event) {
+document.onkeyup = function(event: any) {
   if (event.target.tagName === 'TEXTAREA') return;
   const ev = toJoyPadEvent(event.keyCode);
   if (ev === 'none') return;
   gbi.JoyPadEvent(ev, false);
 };
-document.onkeydown = function(event) {
+document.onkeydown = function(event: any) {
   if (event.target.tagName === 'TEXTAREA') return;
     const ev = toJoyPadEvent(event.keyCode);
   if (ev === 'none') return;
