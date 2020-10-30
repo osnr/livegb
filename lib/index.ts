@@ -1143,12 +1143,12 @@ document.body.appendChild(help);
 
 declare var GameBoyCore: any;
 
-function ab2str(buf: number[]) {
+function ab2str(buf: number[]): string {
   return String.fromCharCode.apply(null, new Uint16Array(buf));
 }
 
 
-let rom, gbi: any, runner: any;
+let rom: string, gbi: any, runner: any;
 let started = false;
 function patch() {
   console.time('avik das');
@@ -1159,18 +1159,13 @@ function patch() {
   if (started) {
     window.clearInterval(runner);
 
-    // two possible patching strategies -- reset and replay input,
-    // or try to reasonably splice on top of RAM
-    const justRerun = false;
-    if (justRerun) {
-      gbi = new GameBoyCore(canvas, rom);
-      gbi.stopEmulator = 1;
-      gbi.start();
-
-    } else {
-      gbi.ROMImage = rom;
-      gbi.ROMLoad(true);
-    }
+    // two possible patching strategies -- reset and replay input, or
+    // try to reasonably splice on top of RAM. we just splice it in.
+    gbi.ROMImage = rom;
+    const interpretCartridge = gbi.interpretCartridge;
+    gbi.interpretCartridge = function() {}; // we stub this out so the hot swap works
+    gbi.ROMLoad(true);
+    gbi.interpretCartridge = interpretCartridge; // we don't really need to put this back, but w/e
     runner = window.setInterval(() => gbi.run(), 8);
   }
 
@@ -1228,11 +1223,13 @@ document.onkeydown = function(event: any) {
   gbi.JoyPadEvent(ev, true);
 };
 
+canvas.onclick = function() {
+  canvas.onclick = undefined;
 
-gbi = new GameBoyCore(canvas, rom);
-gbi.stopEmulator = 1;
-gbi.start();
-runner = window.setInterval(() => gbi.run(), 8);
+  (window as any).gbi = gbi = new GameBoyCore(canvas, rom);
+  gbi.stopEmulator = 1;
+  gbi.start();
+  runner = window.setInterval(() => gbi.run(), 8);
 
-started = true;
-
+  started = true;
+};
