@@ -1107,6 +1107,7 @@ document.body.appendChild(editor);
 
 
 const canvas = document.createElement('canvas');
+canvas.width = 160; canvas.height = 144;
 canvas.style.position = 'fixed';
 canvas.style.top = '0';
 canvas.style.left = '51%';
@@ -1223,6 +1224,13 @@ document.onkeydown = function(event: any) {
   gbi.JoyPadEvent(ev, true);
 };
 
+// we need to have user click so that the browser lets us play audio.
+(function() {
+  const ctx = canvas.getContext('2d');
+  ctx.font = '14px Verdana, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Click here to start!', 160/2, 144/2);
+})();
 canvas.onclick = function() {
   canvas.onclick = undefined;
 
